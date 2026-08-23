@@ -1,36 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo_Black, DM_Mono } from "next/font/google";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const display = Archivo_Black({ variable: "--font-display", subsets: ["latin"], weight: "400" });
+const mono = DM_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["400", "500"] });
 
-export const metadata: Metadata = {
-  title: "Challenges | Bookchaowalit",
-  description: "Track coding challenges.",
-  keywords: ["challenges", "portfolio"],
-  authors: [{ name: "Bookchaowalit", url: "https://bookchaowalit.com" }],
-  creator: "Bookchaowalit",
-  metadataBase: new URL("https://bookchaowalit.com"),
-  openGraph: {
-    type: "website",
-    title: "Challenges | Bookchaowalit",
-    description: "Track coding challenges.",
-    siteName: "Bookchaowalit",
-  },
-  robots: { index: true, follow: true },
-};
+export const metadata: Metadata = { title: "Challenges — Bookchaowalit", description: "A local quarry for coding challenges worth returning to.", metadataBase: new URL("https://challenges.bookchaowalit.com"), openGraph: { title: "Challenges — Bookchaowalit", description: "A local quarry for coding challenges worth returning to.", type: "website" } };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Analytics />
-        <SpeedInsights />
-        {children}
-      </body>
-    </html>
-  );
-}
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body className={`${display.variable} ${mono.variable}`}>{/* THESIS: coding problems become quarry blocks, refusing the default task table. OWN-WORLD: stone, weathered sky, orange cuts, yellow survey marks, and architectural typography. STORY: name a problem, move it through the cut, and leave a useful face behind. FIRST VIEWPORT: a giant quarry block readout sits beside the oversized thesis; the queue follows below. FORM: assigned cloud quarry direction, candidate 4 of 7, seed 694f64f5. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance */}{children}</body></html>; }
