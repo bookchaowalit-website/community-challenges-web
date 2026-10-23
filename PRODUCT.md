@@ -1,46 +1,43 @@
-# bookchaowalit-challenges-frontend — Product brief
+# Challenges — Product truth
 
-**Slug:** `bookchaowalit-website/bookchaowalit-challenges-frontend`  
-**Generated:** 2026-08-11 (bulk Book Dev closeout)  
-**Status:** starter / portfolio boundary
+> Inferred from the code and copy (no user interview). Checked against the portfolio card claims review
+> (`portfolio-site-web/docs/audits/CARD-CLAIMS-REVIEW-2026-10.md`, row `challenges`) on 2026-10-23.
 
-## Purpose
+## What it is
 
-Portfolio repository under Book Dev. This brief records ownership and the
-current honest status so the nested tree is not an empty shell in the task
-system.
+A client-only demo of a personal coding-challenge queue stored in the visitor's browser.
 
-## Runnable path
+## Who it is for
 
-See `README.md` for install and run instructions when present.
+A portfolio visitor who wants to see a small list UI with search, state filters and a create form.
 
-## Limits
+## What works today
 
-- Not claimed as production-ready unless README and tests prove it.
-- Mobile smoke / emulator acceptance is separate and toolchain-dependent.
+1. Two sample records (100 Days of Code, Advent of Code) until the visitor saves their own list.
+2. Add a challenge (title required, notes optional, start state), change a record's state or remove it.
+3. Search title, notes or state (case-insensitive) and filter by All / Draft / Active / Done / Planned; counts for
+   total, active and done.
+4. The list is saved in localStorage (`challenges-v2`); malformed saved data is ignored instead of breaking the page,
+   and changes in another tab show up through the `storage` event.
+5. `/api/mcp` answers JSON-RPC `initialize` and `tools/list` (no tools: the server has no list) and rejects tool calls.
+6. Front-end and server errors go to Sentry (errors only, personal data stripped) when `NEXT_PUBLIC_SENTRY_DSN` is set.
 
-## Source README excerpt
+## What does not work (and must not be claimed)
 
-```
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+- No categorised problem catalogue, difficulty levels, solution submission with live preview, or community voting
+  (claims removed from the portfolio card in the 2026-10 review). No ranking or competition feed.
+- No account, server storage or sync. No product analytics beyond Vercel Analytics.
 
-## Getting Started
+## Live URL and deploy state
 
-First, run the development server:
+- Live: https://challenges.bookchaowalit.com (HTTP 200 on 2026-10-23).
+- The Vercel project `bookchaowalit-challenges-frontend` is deployed only by CLI (last production 2026-10-23 04:45 UTC,
+  the CVE patch build of commit 9077a0c) and its Git link names the old repository
+  (`bookchaowalit/bookchaowalit-challenges-frontend`), so a push to `main` does not deploy. The live site lags `main`
+  (no Sentry, old template MCP route, unvalidated storage) until the owner reconnects Vercel Git to this repository
+  (owner action D9). `NEXT_PUBLIC_SENTRY_DSN` is already set on the Vercel project (Sentry project
+  `community-challenges-web`, org `personal-yu0`).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Boundaries
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize an
-```
+- Browser-only apart from the stateless `/api/mcp` route.
