@@ -49,11 +49,27 @@ export function removeChallenge(challenges: Challenge[], id: string): Challenge[
   return challenges.filter((item) => item.id !== id);
 }
 
-/** The saved list; the sample list when nothing is saved or the saved value is unreadable. */
+function isChallenge(value: unknown): value is Challenge {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.title === "string" &&
+    typeof record.notes === "string" &&
+    STATUSES.includes(record.status as ChallengeStatus) &&
+    typeof record.createdAt === "number" && Number.isFinite(record.createdAt)
+  );
+}
+
+/**
+ * The saved list (malformed records dropped); the sample list when nothing is saved or the saved value is not a
+ * readable list.
+ */
 export function parseChallenges(raw: string | null): Challenge[] {
   if (!raw) return SEED;
   try {
-    return JSON.parse(raw) as Challenge[];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isChallenge) : SEED;
   } catch {
     return SEED;
   }
