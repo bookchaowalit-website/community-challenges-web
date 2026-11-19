@@ -4,7 +4,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { AppFoot, AppTop, ListButton, PlusIcon, type Tone } from "@/components/app-shell";
 import { EMPTY_DRAFT, STATUSES, challengeStore, createChallenge, filterChallenges, formatAdded, restoreChallenge, setStatus, type Challenge, type ChallengeStatus, type Draft, type Filter } from "@/lib/challenges";
 
-type Removed = { challenge: Challenge; beforeId: string | null; nextShown?: string; prevShown?: string; viaKeyboard: boolean };
+// beforeId: the challenge that followed it when it was removed. nextShown / prevShown: the rows shown around it, for focus.
+type RemovedEntry = { challenge: Challenge; beforeId: string | null; nextShown?: string; prevShown?: string };
+type RemovedBatch = { entries: RemovedEntry[]; viaKeyboard: boolean };
+const removedLabel = (entries: RemovedEntry[]) => (entries.length === 1 ? `Removed “${entries[0].challenge.title}”` : `Removed ${entries.length} challenges`);
 
 const TONE: Record<ChallengeStatus, Tone> = { Draft: "grey", Planned: "amber", Active: "green", Done: "grey" };
 const FILTERS: Filter[] = ["All", ...STATUSES];
@@ -22,7 +25,11 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("All");
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
-  const [removed, setRemoved] = useState<Removed | null>(null);
+  // Every removal still inside the Undo window: one Undo puts them all back where they were.
+  const [removed, setRemovedState] = useState<RemovedBatch | null>(null);
+  // The latest batch, so two removals before a re-render still both land in it.
+  const removedRef = useRef<RemovedBatch | null>(null);
+  const setRemoved = (batch: RemovedBatch | null) => { removedRef.current = batch; setRemovedState(batch); };
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
@@ -63,10 +70,10 @@ export default function Home() {
     observer?.observe(toast);
     return () => { observer?.disconnect(); rootStyle.removeProperty("--as-toast-space"); };
   }, [toastShown]);
-  // The toast closes 6 s after a removal, but never while it holds focus.
+  // The toast closes 6 s after the latest removal (each removal restarts it), but never while it holds focus.
   useEffect(() => {
     if (!removed || toastFocused) return;
-    const timer = window.setTimeout(() => setRemoved(null), 6000);
+    const timer = window.setTimeout(() => { removedRef.current = null; setRemovedState(null); }, 6000);
     return () => window.clearTimeout(timer);
   }, [removed, toastFocused]);
 
@@ -94,20 +101,27 @@ export default function Home() {
     if (index < 0) return;
     const shownAt = visible.findIndex((item) => item.id === challenge.id);
     setChallenges((items) => items.filter((item) => item.id !== challenge.id));
-    setRemoved({ challenge, beforeId: challenges[index + 1]?.id ?? null, nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined, viaKeyboard });
-    setAnnouncement(`Removed “${challenge.title}”. Undo is available for a few seconds.`);
+    const entry: RemovedEntry = { challenge, beforeId: challenges[index + 1]?.id ?? null, nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined };
+    const entries = [...(removedRef.current?.entries ?? []), entry];
+    setRemoved({ entries, viaKeyboard });
+    setAnnouncement(entries.length === 1 ? `Removed “${challenge.title}”. Undo is available for a few seconds.` : `Removed ${entries.length} challenges. Undo is available for a few seconds.`);
   }
   function closeToast(ids?: string[]) {
-    focusNext.current = ids ?? [removed?.nextShown, removed?.prevShown].filter((id): id is string => Boolean(id));
+    const last = removedRef.current?.entries.at(-1);
+    // Dismissed: the row after the removed one, else the one before it.
+    focusNext.current = ids ?? [last?.nextShown, last?.prevShown].filter((id): id is string => Boolean(id));
     setRemoved(null);
     setToastFocused(false);
   }
   function undo() {
-    if (!removed) return;
-    const { challenge, beforeId } = removed;
-    setChallenges((items) => restoreChallenge(items, challenge, beforeId));
-    setAnnouncement(`Restored “${challenge.title}”.`);
-    closeToast([challenge.id]);
+    const entries = removedRef.current?.entries;
+    if (!entries?.length) return;
+    // Latest removal first: each goes back before the challenge that followed it when it was removed.
+    setChallenges((current) => entries.reduceRight((list, { challenge, beforeId }) => restoreChallenge(list, challenge, beforeId), current));
+    const latest = entries[entries.length - 1].challenge;
+    setAnnouncement(entries.length === 1 ? `Restored “${latest.title}”.` : `Restored ${entries.length} challenges.`);
+    // Undone: back to the restored row the user removed last.
+    closeToast([latest.id]);
   }
 
   const title = filter === "All" ? "All challenges" : filter;
@@ -217,8 +231,8 @@ export default function Home() {
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
           onKeyDown={(event) => { if (event.key === "Escape") closeToast(); }}
         >
-          <span>Removed “{removed.challenge.title}”</span>
-          <button ref={undoRef} type="button" className="as-plain" onClick={undo} aria-label="Undo remove">Undo</button>
+          <span>{removedLabel(removed.entries)}</span>
+          <button ref={undoRef} type="button" className="as-plain" onClick={undo} aria-label={removed.entries.length === 1 ? "Undo remove" : `Undo remove of ${removed.entries.length} challenges`}>Undo</button>
         </div>
       ) : null}
 
