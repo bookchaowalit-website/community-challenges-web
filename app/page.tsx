@@ -1,34 +1,228 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { EMPTY_DRAFT, STATUSES, challengeStore, countChallenges, createChallenge, filterChallenges, removeChallenge, setStatus, type ChallengeStatus, type Draft, type Filter } from "@/lib/challenges";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { AppFoot, AppTop, ListButton, PlusIcon, type Tone } from "@/components/app-shell";
+import { EMPTY_DRAFT, STATUSES, challengeStore, createChallenge, filterChallenges, formatAdded, restoreChallenge, setStatus, type Challenge, type ChallengeStatus, type Draft, type Filter } from "@/lib/challenges";
+
+type Removed = { challenge: Challenge; beforeId: string | null; nextShown?: string; prevShown?: string; viaKeyboard: boolean };
+
+const TONE: Record<ChallengeStatus, Tone> = { Draft: "grey", Planned: "amber", Active: "green", Done: "grey" };
+const FILTERS: Filter[] = ["All", ...STATUSES];
+
+// randomUUID only exists in secure contexts (HTTPS/localhost) and newer browsers.
+function createId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `challenge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export default function Home() {
   const challenges = useSyncExternalStore(challengeStore.subscribe, challengeStore.getSnapshot, challengeStore.getServerSnapshot);
   const setChallenges = challengeStore.set;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
+  const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
-  const [notice, setNotice] = useState("The quarry is open.");
-  const filtered = useMemo(() => filterChallenges(challenges, filter, query), [challenges, filter, query]);
-  const counts = countChallenges(challenges);
-  function updateStatus(id: string, status: ChallengeStatus) { setChallenges((items) => setStatus(items, id, status)); setNotice(`State marked ${status.toLowerCase()}.`); }
-  function addChallenge(event: React.FormEvent<HTMLFormElement>) {
+  const [removed, setRemoved] = useState<Removed | null>(null);
+  const [toastFocused, setToastFocused] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const titleRef = useRef<HTMLInputElement>(null);
+  const newRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const toastRef = useRef<HTMLDivElement>(null);
+  const wasComposing = useRef(false);
+  const focusNext = useRef<string[] | null>(null);
+  const visible = useMemo(() => filterChallenges(challenges, filter, query), [challenges, filter, query]);
+  const countOf = (value: Filter) => (value === "All" ? challenges.length : challenges.filter((item) => item.status === value).length);
+
+  // Opening the composer focuses the title; closing it returns focus to New challenge.
+  useEffect(() => {
+    if (composing) titleRef.current?.focus();
+    else if (wasComposing.current) newRef.current?.focus();
+    wasComposing.current = composing;
+  }, [composing]);
+  useEffect(() => { if (removed?.viaKeyboard) undoRef.current?.focus(); }, [removed]);
+  // After the toast closes, focus goes to the nearest row still shown, else New challenge.
+  useEffect(() => {
+    const ids = focusNext.current;
+    if (removed || !ids) return;
+    focusNext.current = null;
+    const rows = [...document.querySelectorAll<HTMLElement>(".as-row[data-challenge]")];
+    const row = ids.map((id) => rows.find((r) => r.dataset.challenge === id)).find(Boolean);
+    (row?.querySelector<HTMLButtonElement>(".as-danger") ?? newRef.current ?? titleRef.current)?.focus();
+  }, [removed, challenges]);
+  // Reserve the toast's height at the bottom so a control focused behind it scrolls clear.
+  const toastShown = removed !== null;
+  useLayoutEffect(() => {
+    const toast = toastRef.current;
+    if (!toastShown || !toast) return;
+    const rootStyle = document.documentElement.style;
+    const reserve = () => rootStyle.setProperty("--as-toast-space", `${toast.offsetHeight + 32}px`);
+    reserve();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(reserve) : null;
+    observer?.observe(toast);
+    return () => { observer?.disconnect(); rootStyle.removeProperty("--as-toast-space"); };
+  }, [toastShown]);
+  // The toast closes 6 s after a removal, but never while it holds focus.
+  useEffect(() => {
+    if (!removed || toastFocused) return;
+    const timer = window.setTimeout(() => setRemoved(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [removed, toastFocused]);
+
+  function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const challenge = createChallenge(draft, crypto.randomUUID(), Date.now());
+    const challenge = createChallenge(draft, createId(), Date.now());
     if (!challenge) return;
     setChallenges((items) => [challenge, ...items]);
-    setDraft(EMPTY_DRAFT); setNotice("New cut added to the quarry.");
+    if (filter !== "All" && filter !== challenge.status) setFilter(challenge.status);
+    setQuery("");
+    setAnnouncement(`Added “${challenge.title}”.`);
+    setDraft(EMPTY_DRAFT);
+    setComposing(false);
   }
+  function changeStatus(challenge: Challenge, status: ChallengeStatus) {
+    setChallenges((items) => setStatus(items, challenge.id, status));
+    setAnnouncement(`“${challenge.title}” is now ${status}.`);
+  }
+  function clearSearch() {
+    setQuery("");
+    searchRef.current?.focus();
+  }
+  function remove(challenge: Challenge, viaKeyboard: boolean) {
+    const index = challenges.findIndex((item) => item.id === challenge.id);
+    if (index < 0) return;
+    const shownAt = visible.findIndex((item) => item.id === challenge.id);
+    setChallenges((items) => items.filter((item) => item.id !== challenge.id));
+    setRemoved({ challenge, beforeId: challenges[index + 1]?.id ?? null, nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined, viaKeyboard });
+    setAnnouncement(`Removed “${challenge.title}”. Undo is available for a few seconds.`);
+  }
+  function closeToast(ids?: string[]) {
+    focusNext.current = ids ?? [removed?.nextShown, removed?.prevShown].filter((id): id is string => Boolean(id));
+    setRemoved(null);
+    setToastFocused(false);
+  }
+  function undo() {
+    if (!removed) return;
+    const { challenge, beforeId } = removed;
+    setChallenges((items) => restoreChallenge(items, challenge, beforeId));
+    setAnnouncement(`Restored “${challenge.title}”.`);
+    closeToast([challenge.id]);
+  }
+
+  const title = filter === "All" ? "All challenges" : filter;
+
   return (
-    <main className="cq-page">
-      <nav className="cq-nav" aria-label="Primary"><Link href="/" className="cq-mark">BOOK / DEV</Link><span>FIELD NOTE 01 · CHALLENGES</span><span className="cq-nav-status"><i aria-hidden="true" /> LOCAL WORKSPACE</span></nav>
-      <section className="cq-hero" aria-labelledby="page-title"><div><p className="cq-kicker">OPERATING BENCH / CUT 04</p><h1 id="page-title">Cut the hard problem into shape.</h1><p className="cq-dek">A local queue for coding problems worth returning to. Each challenge is a block on the bench: name it, leave a note, and move it through the cut.</p><p className="cq-proof"><span>01</span> The archive stays honest: browser-only records, no ranking system, no fake competition feed.</p></div><div className="cq-quarry" aria-hidden="true"><div className="cq-quarry-sky" /><div className="cq-quarry-block cq-quarry-block--one"><span>ACTIVE</span><b>{String(counts.active).padStart(2, "0")}</b></div><div className="cq-quarry-block cq-quarry-block--two"><span>DONE</span><b>{String(counts.done).padStart(2, "0")}</b></div><div className="cq-quarry-line" /><span className="cq-quarry-label">TEMPORARY ARCHITECTURE</span></div></section>
-      <section className="cq-readout" aria-label="Challenge readout"><div><span>TOTAL BLOCKS</span><strong>{counts.total}</strong></div><div><span>ACTIVE CUTS</span><strong>{counts.active}</strong></div><div><span>FINISHED FACES</span><strong>{counts.done}</strong></div><p role="status">{notice}</p></section>
-      <section className="cq-queue" aria-labelledby="queue-title"><div className="cq-section-head"><div><p className="cq-label">02 / THE BENCH</p><h2 id="queue-title">Challenge quarry</h2></div><p>{filtered.length} / {challenges.length} visible</p></div><div className="cq-tools"><label className="cq-search"><span>SEARCH THE CUT</span><input aria-label="Search challenges" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, note, state" /></label><div className="cq-filters" role="group" aria-label="Filter challenges by state">{["All", ...STATUSES].map((option) => <button type="button" key={option} className={filter === option ? "is-active" : ""} onClick={() => setFilter(option as Filter)} aria-pressed={filter === option}>{option}</button>)}</div></div>{filtered.length ? <ul className="cq-list">{filtered.map((challenge, index) => <li key={challenge.id}><article className={`cq-card cq-card--${challenge.status.toLowerCase()}`}><div className="cq-card-number">{String(index + 1).padStart(2, "0")}</div><div className="cq-card-copy"><p className="cq-card-meta">CUT / {challenge.status.toUpperCase()}</p><h3>{challenge.title}</h3><p>{challenge.notes || "No notes on this face yet."}</p><time dateTime={new Date(challenge.createdAt).toISOString()}>Added {new Date(challenge.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</time></div><div className="cq-card-actions"><label><span>STATE</span><select aria-label={`State for ${challenge.title}`} value={challenge.status} onChange={(event) => updateStatus(challenge.id, event.target.value as ChallengeStatus)}>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label><button type="button" className="cq-delete" onClick={() => { setChallenges((items) => removeChallenge(items, challenge.id)); setNotice("Block removed from this browser."); }}>REMOVE</button></div></article></li>)}</ul> : <div className="cq-empty"><strong>No faces match this cut.</strong><span>Clear the filter or add a new challenge below.</span></div>}</section>
-      <section className="cq-new" aria-labelledby="new-title"><div><p className="cq-label">03 / NEW MATERIAL</p><h2 id="new-title">Open a fresh cut.</h2><p>Name the question before the next interesting problem disappears into the noise.</p></div><form onSubmit={addChallenge}><label><span>CHALLENGE *</span><input aria-label="Challenge title" required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="A problem worth solving" /></label><label><span>NOTES</span><textarea aria-label="Challenge notes" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="What is the useful edge?" /></label><label><span>START STATE</span><select aria-label="Challenge state" value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as ChallengeStatus })}>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label><button type="submit" className="cq-submit">ADD TO BENCH <span aria-hidden="true">↗</span></button></form></section>
-      <footer className="cq-footer"><strong>CHALLENGES / LOCAL QUARRY</strong><span>Bookchaowalit · browser storage only · {new Date().getFullYear()}</span></footer>
-    </main>
+    <div className="as">
+      <a className="as-skip" href="#main">Skip to content</a>
+      <AppTop name="Challenges" tagline="Coding problems worth returning to" />
+
+      <div className="as-body">
+        <aside className="as-side" aria-label="Lists">
+          <h2>By state</h2>
+          <ul className="as-lists">
+            {FILTERS.map((value) => (
+              <ListButton key={value} label={value === "All" ? "All challenges" : value} count={countOf(value)} tone={value === "All" ? undefined : TONE[value]} current={filter === value} onSelect={() => setFilter(value)} />
+            ))}
+          </ul>
+        </aside>
+
+        <main id="main" className="as-main">
+          <div className="as-head">
+            <div>
+              <h1>{title}</h1>
+              <p aria-live="polite">{visible.length} {visible.length === 1 ? "challenge" : "challenges"}{query.trim() ? ` matching “${query.trim()}”` : ""}</p>
+            </div>
+            <div className="as-tools">
+              <label className="as-search">
+                <span className="as-sr">Search challenges</span>
+                <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />
+              </label>
+              {composing ? null : <button ref={newRef} type="button" className="as-button" onClick={() => setComposing(true)}><PlusIcon />New challenge</button>}
+            </div>
+          </div>
+
+          {composing ? (
+            <form className="as-composer" onSubmit={add} aria-label="New challenge">
+              <label className="as-field">Challenge
+                <input ref={titleRef} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="A problem worth solving" autoComplete="off" required />
+              </label>
+              <label className="as-field">Notes
+                <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="What is the useful edge?" rows={3} />
+              </label>
+              <div className="as-composer-foot">
+                <div className="as-segmented-wrap">
+                  <span id="state-label">Start as</span>
+                  <div className="as-segmented" role="group" aria-labelledby="state-label">
+                    {STATUSES.map((status) => (
+                      <button key={status} type="button" aria-pressed={draft.status === status} onClick={() => setDraft({ ...draft, status })}>{status}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="as-composer-actions">
+                  <button type="button" className="as-plain" onClick={() => { setComposing(false); setDraft(EMPTY_DRAFT); }}>Cancel</button>
+                  <button type="submit" className="as-button" disabled={!draft.title.trim()}>Add</button>
+                </div>
+              </div>
+            </form>
+          ) : null}
+
+          {visible.length ? (
+            <ul className="as-list" aria-label={title}>
+              {visible.map((challenge) => (
+                <li className="as-row" key={challenge.id} data-challenge={challenge.id}>
+                  <div>
+                    <h3>{challenge.title}</h3>
+                    <p className="as-row-detail">{challenge.notes || "No notes yet."}</p>
+                    <p className="as-row-meta">Added <time dateTime={new Date(challenge.createdAt).toISOString()}>{formatAdded(challenge.createdAt)}</time></p>
+                  </div>
+                  <label className="cq-state">
+                    <span className="as-sr">State of {challenge.title}</span>
+                    <select value={challenge.status} data-tone={TONE[challenge.status]} onChange={(event) => changeStatus(challenge, event.target.value as ChallengeStatus)}>
+                      {STATUSES.map((status) => <option key={status}>{status}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className="as-plain as-danger" aria-label={`Remove ${challenge.title}`} onClick={(event) => remove(challenge, event.detail === 0)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="as-list as-empty">
+              {query.trim() ? (
+                <>
+                  <strong>Nothing matches</strong>
+                  No challenge in {filter === "All" ? "your list" : title} mentions “{query.trim()}”.
+                  <div className="as-actions-row cq-center"><button type="button" className="as-plain" onClick={clearSearch}>Clear search</button></div>
+                </>
+              ) : challenges.length === 0 ? (
+                <><strong>No challenges yet</strong>Press New challenge to name the next problem worth solving.</>
+              ) : (
+                <><strong>Nothing is {title} yet</strong>Change a challenge&apos;s state, or press New challenge and start it as {title}.</>
+              )}
+            </div>
+          )}
+
+          <p className="as-note">Saved in this browser only. No account, no ranking, no competition feed.</p>
+        </main>
+      </div>
+
+      <p className="as-sr" role="status" aria-live="polite">{announcement}</p>
+      {removed ? (
+        <div
+          ref={toastRef}
+          className="as-toast"
+          role="group"
+          aria-label="Undo remove"
+          onFocus={() => setToastFocused(true)}
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
+          onKeyDown={(event) => { if (event.key === "Escape") closeToast(); }}
+        >
+          <span>Removed “{removed.challenge.title}”</span>
+          <button ref={undoRef} type="button" className="as-plain" onClick={undo} aria-label="Undo remove">Undo</button>
+        </div>
+      ) : null}
+
+      <AppFoot source="https://github.com/bookchaowalit-website/community-challenges-web" />
+    </div>
   );
 }

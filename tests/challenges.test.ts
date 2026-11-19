@@ -89,3 +89,17 @@ describe("createChallengeStore", () => {
     expect(store.getSnapshot()).toEqual([item("z", "Draft")]);
   });
 });
+
+describe("restoreChallenge and formatAdded", () => {
+  it("puts a challenge back before its old neighbour, at the end otherwise, never twice", async () => {
+    const { SEED, restoreChallenge } = await import("@/lib/challenges");
+    const [a, b] = SEED;
+    expect(restoreChallenge([b], a, b.id)).toEqual([a, b]);
+    expect(restoreChallenge([a], b, null)).toEqual([a, b]);
+    expect(restoreChallenge([a, b], b, null)).toEqual([a, b]);
+  });
+  it("formats in UTC", async () => {
+    const { formatAdded } = await import("@/lib/challenges");
+    expect(formatAdded(Date.UTC(2026, 7, 18, 23))).toBe("18 Aug 2026");
+  });
+});

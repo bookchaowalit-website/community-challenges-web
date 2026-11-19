@@ -134,3 +134,15 @@ export function createChallengeStore(getStorage: () => Storage | null, key = STO
 }
 
 export const challengeStore = createChallengeStore(() => (typeof window === "undefined" ? null : window.localStorage));
+
+/** Put a removed challenge back before the one that followed it (or at the end), for Undo. */
+export function restoreChallenge(challenges: Challenge[], challenge: Challenge, beforeId: string | null): Challenge[] {
+  if (challenges.some((item) => item.id === challenge.id)) return challenges;
+  const at = beforeId ? challenges.findIndex((item) => item.id === beforeId) : -1;
+  return at < 0 ? [...challenges, challenge] : [...challenges.slice(0, at), challenge, ...challenges.slice(at)];
+}
+
+/** "18 Aug 2026" in UTC, so the server and every browser print the same date. */
+export function formatAdded(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}

@@ -26,7 +26,7 @@ A portfolio visitor who wants to see a small list UI with search, state filters 
 
 - No categorised problem catalogue, difficulty levels, solution submission with live preview, or community voting
   (claims removed from the portfolio card in the 2026-10 review). No ranking or competition feed.
-- No account, server storage or sync. No product analytics beyond Vercel Analytics.
+- No account, server storage or sync. No product analytics.
 
 ## Live URL and deploy state
 
