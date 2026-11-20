@@ -19,7 +19,7 @@ function createId(): string {
 }
 
 // One line of the notes per row (App shell rule); a longer one gets Show more, so the full text can still be read.
-function RowDetail({ text }: { text: string }) {
+function RowDetail({ text, title }: { text: string; title: string }) {
   const ref = useRef<HTMLParagraphElement>(null);
   const id = useId();
   const [expanded, setExpanded] = useState(false);
@@ -49,7 +49,7 @@ function RowDetail({ text }: { text: string }) {
       <p ref={ref} id={id} className="as-row-detail" data-expanded={expanded ? "true" : undefined}>{text}</p>
       {long ? (
         <button type="button" className="as-plain as-row-more" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Show less" : "Show more"}
+          {expanded ? "Show less" : "Show more"}<span className="as-sr"> for {title}</span>
         </button>
       ) : null}
     </>
@@ -225,7 +225,7 @@ export default function Home() {
                 <li className="as-row" key={challenge.id} data-challenge={challenge.id}>
                   <div>
                     <h3>{challenge.title}</h3>
-                    <RowDetail text={challenge.notes || "No notes yet."} />
+                    <RowDetail title={challenge.title} text={challenge.notes || "No notes yet."} />
                     <p className="as-row-meta">{addedIso(challenge.createdAt) ? <>Added <time dateTime={addedIso(challenge.createdAt)!}>{formatAdded(challenge.createdAt)}</time></> : "Added date unknown"}</p>
                   </div>
                   <label className="cq-state">

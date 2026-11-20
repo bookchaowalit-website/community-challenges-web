@@ -184,6 +184,17 @@ describe("full note", () => {
     expect(button("Show less")).toBe(more);
   });
 
+  it("Show more names the challenge whose note it opens", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("as-row-detail") ? 400 : 200;
+    });
+    remount();
+    const more = button("Show more");
+    expect(more.textContent).toBe("Show more for 100 Days of Code");
+    expect(more.querySelector(".as-sr")!.textContent).toBe(" for 100 Days of Code");
+  });
+
   it("a note that fits gets no Show more", () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
     vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
