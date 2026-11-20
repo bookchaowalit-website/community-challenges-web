@@ -34,6 +34,9 @@ A portfolio visitor who wants to see a small list UI with search, state filters 
 - Undo after another tab removed the next challenge: Undo puts a challenge back before the one that followed it when
   it was removed; if another tab has removed that one too, it goes to the end of the list (A, B, C: remove A here, B
   there, Undo gives C, A). Multi-tab only (Codex report -07412d0f06).
+- Undo puts back the challenge as this tab showed it when Remove was pressed: if another tab changed it (e.g. its
+  state to Done) and this tab had not yet received the storage event, Undo restores the older copy and that change is
+  lost. Multi-tab only (Codex report -11699e8d1b).
 
 ## Live URL and deploy state
 
