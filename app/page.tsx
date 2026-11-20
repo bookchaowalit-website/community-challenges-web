@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AppFoot, AppTop, ListButton, PlusIcon, type Tone } from "@/components/app-shell";
-import { EMPTY_DRAFT, STATUSES, challengeStore, createChallenge, filterChallenges, formatAdded, restoreChallenge, setStatus, type Challenge, type ChallengeStatus, type Draft, type Filter } from "@/lib/challenges";
+import { EMPTY_DRAFT, STATUSES, challengeStore, createChallenge, filterChallenges, addedIso, formatAdded, restoreChallenge, setStatus, type Challenge, type ChallengeStatus, type Draft, type Filter } from "@/lib/challenges";
 
 // beforeId: the challenge that followed it when it was removed. nextShown / prevShown: the rows shown around it, for focus.
 type RemovedEntry = { challenge: Challenge; beforeId: string | null; nextShown?: string; prevShown?: string };
@@ -16,6 +16,44 @@ const FILTERS: Filter[] = ["All", ...STATUSES];
 function createId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `challenge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// One line of the notes per row (App shell rule); a longer one gets Show more, so the full text can still be read.
+function RowDetail({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const id = useId();
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => { if (el.dataset.expanded !== "true") setClipped(el.scrollWidth > el.clientWidth); };
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(el);
+    measure();
+    // A web font that loads later can widen the text without resizing the box, so measure again then.
+    let live = true;
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    const remeasure = () => { if (live) measure(); };
+    fonts?.ready?.then(remeasure, () => {});
+    fonts?.addEventListener?.("loadingdone", remeasure);
+    return () => {
+      live = false;
+      observer?.disconnect();
+      fonts?.removeEventListener?.("loadingdone", remeasure);
+    };
+  }, [text]);
+  const long = expanded || clipped || text.includes("\n");
+  return (
+    <>
+      <p ref={ref} id={id} className="as-row-detail" data-expanded={expanded ? "true" : undefined}>{text}</p>
+      {long ? (
+        <button type="button" className="as-plain as-row-more" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </>
+  );
 }
 
 export default function Home() {
@@ -187,8 +225,8 @@ export default function Home() {
                 <li className="as-row" key={challenge.id} data-challenge={challenge.id}>
                   <div>
                     <h3>{challenge.title}</h3>
-                    <p className="as-row-detail">{challenge.notes || "No notes yet."}</p>
-                    <p className="as-row-meta">Added <time dateTime={new Date(challenge.createdAt).toISOString()}>{formatAdded(challenge.createdAt)}</time></p>
+                    <RowDetail text={challenge.notes || "No notes yet."} />
+                    <p className="as-row-meta">{addedIso(challenge.createdAt) ? <>Added <time dateTime={addedIso(challenge.createdAt)!}>{formatAdded(challenge.createdAt)}</time></> : "Added date unknown"}</p>
                   </div>
                   <label className="cq-state">
                     <span className="as-sr">State of {challenge.title}</span>

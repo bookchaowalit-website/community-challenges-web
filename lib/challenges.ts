@@ -142,6 +142,14 @@ export function restoreChallenge(challenges: Challenge[], challenge: Challenge, 
   return at < 0 ? [...challenges, challenge] : [...challenges.slice(0, at), challenge, ...challenges.slice(at)];
 }
 
+// Date holds times within ±8.64e15 ms; a saved number outside that (e.g. 1e300) makes toISOString throw.
+const MAX_TIME = 8.64e15;
+
+/** The ISO time for a <time> element, or null when the saved timestamp is not a real date. */
+export function addedIso(timestamp: number): string | null {
+  return Number.isFinite(timestamp) && Math.abs(timestamp) <= MAX_TIME ? new Date(timestamp).toISOString() : null;
+}
+
 /** "18 Aug 2026" in UTC, so the server and every browser print the same date. */
 export function formatAdded(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });

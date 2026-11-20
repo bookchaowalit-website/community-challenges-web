@@ -161,3 +161,42 @@ describe("batch Undo", () => {
     expect(document.activeElement).toBe(removeButton(1));
   });
 });
+
+describe("full note", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  function remount() {
+    act(() => root.unmount());
+    root = createRoot(host);
+    act(() => root.render(<Home />));
+  }
+
+  it("a note clipped to one line gets Show more, which opens the full text", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("as-row-detail") ? 400 : 200;
+    });
+    remount();
+    const more = button("Show more");
+    expect(more).toBeDefined();
+    press(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(more.getAttribute("aria-controls")!)?.dataset.expanded).toBe("true");
+    expect(button("Show less")).toBe(more);
+  });
+
+  it("a note that fits gets no Show more", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
+    remount();
+    expect(button("Show more")).toBeUndefined();
+  });
+
+  it("a saved timestamp outside the Date range shows the row without a date instead of crashing", () => {
+    act(() => { challengeStore.set([{ id: "far", title: "Far future", notes: "x", status: "Active", createdAt: 1e300 }, ...SEED]); });
+    remount();
+    expect(rows()).toContain("Far future");
+    const row = [...host.querySelectorAll(".as-row")].find((r) => r.querySelector("h3")?.textContent === "Far future")!;
+    expect(row.textContent).toContain("Added date unknown");
+    expect(row.querySelector("time")).toBeNull();
+  });
+});
