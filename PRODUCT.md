@@ -28,6 +28,13 @@ A portfolio visitor who wants to see a small list UI with search, state filters 
   (claims removed from the portfolio card in the 2026-10 review). No ranking or competition feed.
 - No account, server storage or sync. No product analytics.
 
+## Known limits
+
+- Frozen 2026-11-20: later review findings are recorded here, not fixed.
+- Undo after another tab removed the next challenge: Undo puts a challenge back before the one that followed it when
+  it was removed; if another tab has removed that one too, it goes to the end of the list (A, B, C: remove A here, B
+  there, Undo gives C, A). Multi-tab only (Codex report -07412d0f06).
+
 ## Live URL and deploy state
 
 - Live: https://challenges.bookchaowalit.com (HTTP 200 on 2026-10-23).
